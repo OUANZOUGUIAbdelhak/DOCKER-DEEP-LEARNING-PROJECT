@@ -1,0 +1,114 @@
+version: '3.8'
+
+services:
+  # Service 1: Training (runs once)
+  training:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.train
+    container_name: dl_training
+    volumes:
+      - ./data:/app/data                    # Data directory
+      - ./models:/app/models                # Model persistence
+      - ./logs:/app/logs                    # Training logs
+    environment:
+      - CUDA_VISIBLE_DEVICES=0              # Use first GPU
+      - TF_FORCE_GPU_ALLOW_GROWTH=true
+      - PYTHONUNBUFFERED=1
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    command: python src/models/train.py --epochs 50 --batch-size 32 --gpu
+    networks:
+      - dl_network
+
+  # Service 2: Swarm Optimization (runs after training)
+  optimization:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.train
+    container_name: dl_optimization
+    volumes:
+      - ./data:/app/data
+      - ./models:/app/models
+    depends_on:
+      - training
+    environment:
+      - CUDA_VISIBLE_DEVICES=0
+      - TF_FORCE_GPU_ALLOW_GROWTH=true
+      - PYTHONUNBUFFERED=1
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    command: python src/optimization/swarm_optimizer.py --n-particles 10 --n-iterations 20 --epochs-per-eval 20
+    networks:
+      - dl_network
+
+  # Service 3: Inference API (runs continuously)
+  api:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.inference
+    container_name: dl_inference_api
+    volumes:
+      - ./models:/app/models:ro            # Read-only access to models
+    ports:
+      - "5000:5000"                        # Expose Flask port
+    depends_on:
+      - optimization
+    restart: unless-stopped
+    environment:
+      - PYTHONUNBUFFERED=1
+      - PORT=5000
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - dl_network
+
+  # Service 4: Jupyter Notebook (optional - for development)
+  jupyter:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.train
+    container_name: dl_jupyter
+    volumes:
+      - ./notebooks:/app/notebooks
+      - ./data:/app/data
+      - ./models:/app/models
+    ports:
+      - "8888:8888"
+    environment:
+      - CUDA_VISIBLE_DEVICES=0
+      - TF_FORCE_GPU_ALLOW_GROWTH=true
+      - PYTHONUNBUFFERED=1
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    command: jupyter notebook --ip=0.0.0.0 --port=8888 --no-browser --allow-root --NotebookApp.token='' --NotebookApp.password=''
+    networks:
+      - dl_network
+
+networks:
+  dl_network:
+    driver: bridge
+
+volumes:
+  models:
+  data:
+  logs:

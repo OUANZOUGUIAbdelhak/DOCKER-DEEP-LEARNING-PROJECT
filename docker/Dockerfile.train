@@ -1,0 +1,41 @@
+# Dockerfile for Training Container
+# Heavy container with full ML stack and GPU support
+
+# Use official TensorFlow GPU image as base
+FROM tensorflow/tensorflow:2.15.0-gpu
+
+# Set working directory
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    python3-pip \
+    git \
+    curl \
+    wget \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements FIRST (for layer caching)
+COPY docker/requirements/train.txt /app/requirements.txt
+
+# Install Python dependencies
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
+
+# Copy source code
+COPY src/ /app/src/
+COPY notebooks/ /app/notebooks/
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1
+ENV TF_FORCE_GPU_ALLOW_GROWTH=true
+ENV CUDA_VISIBLE_DEVICES=0
+
+# Expose Jupyter port (optional)
+EXPOSE 8888
+
+# Expose TensorBoard port (optional)
+EXPOSE 6006
+
+# Default command (can be overridden)
+CMD ["python", "src/models/train.py"]

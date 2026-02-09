@@ -1,0 +1,30 @@
+# Deep Learning Framework
+tensorflow==2.15.0
+
+# Data Science
+numpy==1.24.3
+pandas==2.0.3
+scikit-learn==1.3.0
+
+# Visualization
+matplotlib==3.7.2
+seaborn==0.12.2
+
+# Optimization
+pyswarm==0.6
+
+# Jupyter
+jupyter==1.0.0
+ipykernel==6.25.0
+
+# Utils
+pyyaml==6.0.1
+joblib==1.3.2
+tqdm==4.66.1
+
+# Image processing
+Pillow==10.0.0
+opencv-python==4.8.0.74
+
+# Additional utilities
+requests==2.31.0

@@ -1,0 +1,45 @@
+# Dockerfile for Inference Container
+# Lightweight container for API deployment
+
+# Use slim Python image (no GPU needed for inference)
+FROM python:3.9-slim
+
+WORKDIR /app
+
+# Install minimal system dependencies
+RUN apt-get update && apt-get install -y \
+    libgomp1 \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements FIRST (for layer caching)
+COPY docker/requirements/inference.txt /app/requirements.txt
+
+# Install Python dependencies
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
+
+# Copy ONLY deployment code (not training code)
+COPY src/deployment/ /app/src/deployment/
+COPY src/data/preprocessor.py /app/src/data/preprocessor.py
+COPY src/utils/ /app/src/utils/
+
+# Create necessary __init__ files
+RUN mkdir -p /app/src/data /app/src/utils && \
+    touch /app/src/__init__.py /app/src/data/__init__.py /app/src/utils/__init__.py
+
+# Create non-root user for security
+RUN useradd -m -u 1000 appuser && \
+    chown -R appuser:appuser /app
+
+USER appuser
+
+# Expose API port
+EXPOSE 5000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:5000/health || exit 1
+
+# Run API
+CMD ["python", "src/deployment/api.py"]
